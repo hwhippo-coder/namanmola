@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   
   // 🔍 구글 & 네이버 서치콘솔 소유권 인증 (추후 키값 발급받아 교체)
   verification: {
-    google: "<meta name=1RB5sImbqc5UPfbLjFMPgldt4hUr3hGAKNAfqdgLjrw",
+    google: "1RB5sImbqc5UPfbLjFMPgldt4hUr3hGAKNAfqdgLjrw",
     other: {
       "naver-site-verification": "b92c104c66918d01802ec634eb7c60b8557fffdc",
     },
