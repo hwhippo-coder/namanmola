@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { getEvents, KidEvent } from './actions/getEvents';
 
+
 // ⏱️ 실시간 시간 계산 헬퍼 함수
 function calculateDday(applyStart: string, now: Date) {
   if (!applyStart) return null;
