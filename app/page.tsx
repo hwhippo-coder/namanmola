@@ -378,7 +378,7 @@ export default function Home() {
       {/* 💬 피드백 / 개선 요청 플로팅 버튼 */}
       {/* 아래 href 주소에 생성하신 구글 폼 링크를 정확히 넣어주세요! */}
       <a 
-        href="https://forms.gle/여기에복사하신주소붙여넣기" 
+        href="https://forms.gle/D2sxwyNjtRVY8CXv9" 
         target="_blank" 
         rel="noopener noreferrer"
         className="fixed bottom-6 right-6 bg-gray-900 text-white p-4 rounded-full shadow-2xl hover:bg-gray-800 hover:-translate-y-1 transition-all flex items-center justify-center group z-50 border border-gray-700"
