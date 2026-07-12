@@ -85,7 +85,7 @@ const AGE_OPTIONS = [
 ];
 
 // 🛠️ 타임라인 내부에서 중복 프로그램을 하나로 합쳐주는 헬퍼 함수
-function groupTimelineEvents(events: KidEvent[], type: 'apply' | 'ongoing') {
+function groupTimelineEvents(events: KidEvent[], type: 'apply' | 'ongoing' | 'activeApply') {
   const groups: { [key: string]: { baseEvent: KidEvent; count: number; times: string[] } } = {};
 
   events.forEach(e => {
@@ -249,7 +249,12 @@ export default function Home() {
       const isApplyDate = applyDatePart === selectedTimelineDate;
       const isEventPeriod = target >= start && target <= end;
 
-      return isApplyDate || isEventPeriod;
+      // 💡 메인 하단 리스트용: 현재 접수 기간에 해당하는지도 포함
+      const applyStartDay = new Date(event.applyStart.split(' ')[0]);
+      const applyEndDay = event.applyEnd ? new Date(event.applyEnd.split(' ')[0]) : null;
+      const isApplyPeriod = applyEndDay ? (target >= applyStartDay && target <= applyEndDay) : (target >= applyStartDay);
+
+      return isApplyDate || isEventPeriod || isApplyPeriod;
     });
   }, [baseFilteredEvents, selectedTimelineDate]);
 
@@ -365,18 +370,35 @@ export default function Home() {
           <div className="flex overflow-x-auto gap-4 pb-4 snap-x scrollbar-thin">
             {timelineDates.map((dayObj) => {
               const isSelected = selectedTimelineDate === dayObj.fullDate;
+              const targetDate = new Date(dayObj.fullDate);
               
+              // 1. ⏰ [접수 예정]: 정확히 해당 날짜에 접수가 시작하는 건
               const rawApplyEvents = baseFilteredEvents.filter(e => e.applyStart.split(' ')[0] === dayObj.fullDate);
+              
+              // 2. 🟢 [접수중]: 이미 시작되었고 마감되지 않아 접수 기간 내에 머물러 있는 건 (대표님 피드백 핵심 반영 ⭐️)
+              const rawActiveApplyEvents = baseFilteredEvents.filter(e => {
+                if (e.status === '접수마감') return false;
+                const applyStartPart = e.applyStart.split(' ')[0];
+                if (applyStartPart === dayObj.fullDate) return false; // 접수 오픈 당일과 중복 노출 방지
+                
+                const startDay = new Date(applyStartPart);
+                const endDay = e.applyEnd ? new Date(e.applyEnd.split(' ')[0]) : null;
+                
+                return endDay ? (targetDate >= startDay && targetDate <= endDay) : (targetDate >= startDay);
+              });
+
+              // 3. 🎉 [행사 예정]: 실제 행사/교육 참여 기간인 건
               const rawOngoingEvents = baseFilteredEvents.filter(e => {
                 const start = new Date(e.eventStart);
                 const end = new Date(e.eventEnd || e.eventStart);
-                const target = new Date(dayObj.fullDate);
-                return target >= start && target <= end;
+                return targetDate >= start && targetDate <= end;
               });
 
               const applyEvents = groupTimelineEvents(rawApplyEvents, 'apply');
+              const activeApplyEvents = groupTimelineEvents(rawActiveApplyEvents, 'activeApply');
               const ongoingEvents = groupTimelineEvents(rawOngoingEvents, 'ongoing');
-              const totalCount = applyEvents.length + ongoingEvents.length;
+              
+              const totalCount = applyEvents.length + activeApplyEvents.length + ongoingEvents.length;
               
               return (
                 <div 
@@ -393,19 +415,35 @@ export default function Home() {
                     </span>
                   </div>
 
-                  <div className="flex flex-col gap-2 overflow-y-auto max-h-[280px] pr-1 scrollbar-thin">
+                  <div className="flex flex-col gap-2 overflow-y-auto max-h-[300px] pr-1 scrollbar-thin">
+                    {/* 1. 접수 오픈 예정 목록 (선착순 대기) */}
                     {applyEvents
                       .sort((a, b) => a.displayTime.localeCompare(b.displayTime))
                       .map(e => (
                       <div key={`apply-${e.id}`} className="bg-red-50 p-2 rounded border border-red-100">
                         <div className="flex justify-between items-center text-[10px] text-red-600 font-bold mb-1">
-                          <span>⏰ {e.displayTime}</span>
+                          <span>⏰ {e.displayTime} 오픈</span>
                           <span className="bg-red-100 px-1.5 py-0.5 rounded text-[9px] font-extrabold max-w-[50px] truncate">{e.region}</span>
                         </div>
                         <h4 className="text-[11px] font-bold text-gray-800 line-clamp-2 leading-snug break-keep">{e.displayTitle}</h4>
                       </div>
                     ))}
 
+                    {/* 2. 💡 [대표님 반영] 이미 오픈되어 현재 실시간 신청 접수중인 목록 */}
+                    {activeApplyEvents.map(e => {
+                      const isFlexible = !e.applyEnd || e.applyEnd.trim() === '';
+                      return (
+                        <div key={`active-apply-${e.id}`} className="bg-emerald-50 p-2 rounded border border-emerald-100">
+                          <div className="flex justify-between items-center text-[10px] text-emerald-600 font-bold mb-1">
+                            <span>🟢 {isFlexible ? '선착순 접수중' : '접수 진행중'}</span>
+                            <span className="bg-emerald-100 px-1.5 py-0.5 rounded text-[9px] font-extrabold max-w-[50px] truncate">{e.region}</span>
+                          </div>
+                          <h4 className="text-[11px] font-bold text-gray-800 line-clamp-2 leading-snug break-keep">{e.displayTitle}</h4>
+                        </div>
+                      );
+                    })}
+
+                    {/* 3. 실제 교육/행사 진행 목록 */}
                     {ongoingEvents.map(e => (
                       <div key={`event-${e.id}`} className="bg-blue-50 p-2 rounded border border-blue-100">
                         <div className="flex justify-between items-center text-[10px] text-blue-600 font-bold mb-1">
@@ -436,7 +474,6 @@ export default function Home() {
             {finalFilteredEvents.map((event) => {
               const ddayBadge = currentTime ? calculateDday(event.applyStart, currentTime) : null;
 
-              // 💡 대표님 피드백 반영 핵심 로직: 마감일이 명시되지 않았고 시작일만 지난 유동적 접수 상태 판별
               const isApplyStarted = event.applyStart ? new Date(event.applyStart.replace(' ', 'T')) <= (currentTime || new Date()) : false;
               const hasNoApplyEnd = !event.applyEnd || event.applyEnd.trim() === '';
               const isFlexibleApplying = isApplyStarted && hasNoApplyEnd && event.status !== '접수마감';
@@ -452,7 +489,6 @@ export default function Home() {
                         )}
                       </div>
                       
-                      {/* 💡 상단 배지 색상 조건 다변화: 마감일 없는 유동 접수 데이터는 주황색으로 강조 */}
                       <span className={`text-xs font-bold px-2.5 py-1 rounded-md ${
                         isFlexibleApplying 
                           ? 'bg-orange-100 text-orange-800 animate-pulse' 
@@ -476,7 +512,6 @@ export default function Home() {
                       </div>
                     )}
 
-                    {/* 💡 예외 상황 맞춤형 친절한 경고 박스 노출 */}
                     {isFlexibleApplying && (
                       <div className="mb-4 bg-orange-50 border border-orange-100 rounded-xl p-3 text-xs text-orange-700 font-medium leading-relaxed break-keep flex items-start gap-1.5">
                         <span>💡</span>
