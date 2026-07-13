@@ -1,5 +1,18 @@
 import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { Analytics } from "@vercel/analytics/next";
+
+// 폰트 설정 정의
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
 
 // 🚀 네이버 & 구글 검색 최적화 (SEO) 및 카톡 공유(OG) 마스터 세팅
 export const metadata: Metadata = {
@@ -9,7 +22,7 @@ export const metadata: Metadata = {
   keywords: ["어린이체험", "선착순교육", "주말아이와가볼만한곳", "어린이행사", "체험학습", "지자체프로그램", "나만몰랐어"],
   authors: [{ name: "나만몰랐어 팀" }],
   
-  // 🔍 구글 & 네이버 서치콘솔 소유권 인증 (추후 키값 발급받아 교체)
+  // 🔍 구글 & 네이버 서치콘솔 소유권 인증
   verification: {
     google: "1RB5sImbqc5UPfbLjFMPgldt4hUr3hGAKNAfqdgLjrw",
     other: {
@@ -17,7 +30,7 @@ export const metadata: Metadata = {
     },
   },
 
-  // 💬 카카오톡, 페이스북, 블로그 공유 시 뜨는 썸네일 세팅 (Open Graph)
+  // 💬 카카오톡, 페이스북, 블로그 공유 시 뜨는 Open Graph 세팅
   openGraph: {
     title: "나만몰랐어? - 선착순 교육·체험 정보 마감 알리미",
     description: "매번 놓치는 선착순 어린이 교육/체험 정보, 이제 마감 전에 실시간 타임라인으로 한눈에 확인하세요!",
@@ -51,7 +64,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
-      <body>{children}</body>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }
