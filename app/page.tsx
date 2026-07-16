@@ -260,7 +260,7 @@ export default function Home() {
     });
   }, [baseFilteredEvents, selectedTimelineDate]);
 
-  // 💡 [대표님 피드백] 특정 프로그램 우선순위 및 상태별 정렬 로직 결합
+  // 💡 [안전하게 보완된] 특정 프로그램 우선순위 및 상태별 정렬 로직
   const sortedFilteredEvents = useMemo(() => {
     const now = currentTime || new Date();
 
@@ -273,13 +273,19 @@ export default function Home() {
         if (!aMatch && bMatch) return 1;
       }
 
-      // 2. 상태별 우선순위 점수 산정 로직
+      // 2. 상태별 우선순위 점수 산정 로직 (타입 에러를 유발할 수 있는 접근을 안전하게 보호)
       const getPriority = (event: KidEvent) => {
         const isApplyStarted = event.applyStart ? new Date(event.applyStart.replace(' ', 'T')) <= now : false;
+        
+        // event 내부에 category 필드가 안전하게 존재하는지 검사
+        const categoryStr = (event as any).category || '';
+        const isEduExperience = categoryStr.includes('교육') || categoryStr.includes('체험');
+        const isFestival = categoryStr.includes('축제');
+
         const hasNoApplyEnd = !event.applyEnd || event.applyEnd.trim() === '';
-        const isFlexibleApplying = isApplyStarted && hasNoApplyEnd && event.status !== '접수마감' && (event.category || '').includes('교육/체험');
+        const isFlexibleApplying = isApplyStarted && hasNoApplyEnd && event.status !== '접수마감' && isEduExperience;
         const isEventOngoing = event.eventStart ? new Date(event.eventStart) <= now : false;
-        const isFieldChanceAge = (event.category || '').includes('교육/체험') && (event.status === '접수마감' || !isFlexibleApplying) && isEventOngoing;
+        const isFieldChanceAge = isEduExperience && (event.status === '접수마감' || !isFlexibleApplying) && isEventOngoing;
 
         // 1순위: 신청 다가오는 것 (오픈 예정 및 접수 대기)
         if (event.status === '접수대기' || (event.applyStart && !isApplyStarted)) return 1;
@@ -288,7 +294,7 @@ export default function Home() {
         if (event.status === '접수중' || isFlexibleApplying) return 2;
         
         // 3순위: 행사 진행중인 것 (즉시 참여 및 현장 확인)
-        if (isFieldChanceAge || !event.applyStart || (event.category || '').includes('축제')) return 3;
+        if (isFieldChanceAge || !event.applyStart || isFestival) return 3;
         
         // 4순위: 접수 마감 및 기타
         return 4;
@@ -298,10 +304,10 @@ export default function Home() {
       const prioB = getPriority(b);
 
       if (prioA !== prioB) {
-        return prioA - prioB; // 숫자가 작을수록 우선순위 높음 (1 -> 2 -> 3 -> 4)
+        return prioA - prioB; // 우선순위 점수 순 (1 -> 2 -> 3 -> 4)
       }
 
-      // 3. 같은 상태(우선순위)라면 접수 시작 시간 순서대로 정렬
+      // 3. 같은 상태라면 접수 시작 시간 순 정렬
       if (a.applyStart && b.applyStart) {
         return new Date(a.applyStart.replace(' ', 'T')).getTime() - new Date(b.applyStart.replace(' ', 'T')).getTime();
       }
