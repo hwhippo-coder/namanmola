@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 // 폰트 설정 정의
 const geistSans = Geist({
@@ -67,6 +68,11 @@ export default function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         {children}
         <Analytics />
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+  {children}
+  <Analytics />
+  {/* 💡 바로 여기에 한 줄 추가합니다! */}
+  <SpeedInsights />
       </body>
     </html>
   );
