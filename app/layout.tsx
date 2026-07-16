@@ -68,11 +68,7 @@ export default function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         {children}
         <Analytics />
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-  {children}
-  <Analytics />
-  {/* 💡 바로 여기에 한 줄 추가합니다! */}
-  <SpeedInsights />
+        <SpeedInsights />
       </body>
     </html>
   );
