@@ -131,7 +131,7 @@ function groupTimelineEvents(events: KidEvent[], type: string) {
   });
 }
 
-// 🖼️ 이미지 슬라이더 컴포넌트 (여러 개의 이미지 대응)
+// 🖼️ 세로형 포스터 최적화 이미지 슬라이더 컴포넌트 (스크롤 탐색 + 안내 배지 추가)
 function ImageCarousel({ urls, onImageClick }: { urls: string[]; onImageClick: (url: string) => void }) {
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -148,29 +148,44 @@ function ImageCarousel({ urls, onImageClick }: { urls: string[]; onImageClick: (
   };
 
   return (
-    <div className="relative w-full h-48 bg-gray-100 rounded-xl overflow-hidden mb-4 group/carousel">
-      <img
-        src={urls[currentIndex].trim()}
-        alt="행사 홍보 포스터"
+    <div className="relative w-full h-72 bg-gray-50 rounded-2xl overflow-hidden mb-4 group/carousel border border-gray-100/80 shadow-inner">
+      {/* 💡 [핵심 효과] hover-scroll: 마우스를 올리면 포스터 하단까지 부드럽게 스크롤링되는 액션 */}
+      <div 
         onClick={() => onImageClick(urls[currentIndex].trim())}
-        className="w-full h-full object-contain cursor-zoom-in transition-transform hover:scale-105 duration-300"
-      />
+        className="w-full h-full cursor-zoom-in overflow-hidden relative"
+      >
+        <img
+          src={urls[currentIndex].trim()}
+          alt="행사 홍보 포스터"
+          className="w-full absolute top-0 left-0 transition-all duration-[2.5s] ease-in-out hover:translate-y-[calc(-100%+18rem)] object-cover object-top origin-top"
+          style={{ height: 'auto' }} // 원본 종횡비를 유지하면서 스크롤되도록 설정
+        />
+      </div>
       
+      {/* 🔍 [안내 배지] 우측 하단 포스터 크게 보기 유도 가이드 아이콘 */}
+      <div 
+        onClick={() => onImageClick(urls[currentIndex].trim())}
+        className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 shadow-sm pointer-events-auto cursor-pointer hover:bg-black/80 transition-all"
+      >
+        <span>🔍</span>
+        <span>포스터 크게보기</span>
+      </div>
+
       {urls.length > 1 && (
         <>
           <button
             onClick={prevSlide}
-            className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white rounded-full p-1.5 text-xs hover:bg-black/70 transition opacity-0 group-hover/carousel:opacity-100"
+            className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/50 text-white rounded-full p-2 text-xs hover:bg-black/70 transition opacity-0 group-hover/carousel:opacity-100 z-10"
           >
             ◀
           </button>
           <button
             onClick={nextSlide}
-            className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white rounded-full p-1.5 text-xs hover:bg-black/70 transition opacity-0 group-hover/carousel:opacity-100"
+            className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/50 text-white rounded-full p-2 text-xs hover:bg-black/70 transition opacity-0 group-hover/carousel:opacity-100 z-10"
           >
             ▶
           </button>
-          <div className="absolute bottom-2 left-1/2 -translate-y-1/2 bg-black/40 text-[10px] text-white px-2 py-0.5 rounded-full font-bold">
+          <div className="absolute bottom-3 left-3 bg-black/40 text-[10px] text-white px-2 py-0.5 rounded-full font-bold z-10">
             {currentIndex + 1} / {urls.length}
           </div>
         </>
