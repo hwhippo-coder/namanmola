@@ -131,6 +131,54 @@ function groupTimelineEvents(events: KidEvent[], type: string) {
   });
 }
 
+// 🖼️ 이미지 슬라이더 컴포넌트 (여러 개의 이미지 대응)
+function ImageCarousel({ urls, onImageClick }: { urls: string[]; onImageClick: (url: string) => void }) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  if (!urls || urls.length === 0) return null;
+
+  const nextSlide = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentIndex((prev) => (prev + 1) % urls.length);
+  };
+
+  const prevSlide = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentIndex((prev) => (prev - 1 + urls.length) % urls.length);
+  };
+
+  return (
+    <div className="relative w-full h-48 bg-gray-100 rounded-xl overflow-hidden mb-4 group/carousel">
+      <img
+        src={urls[currentIndex].trim()}
+        alt="행사 홍보 포스터"
+        onClick={() => onImageClick(urls[currentIndex].trim())}
+        className="w-full h-full object-contain cursor-zoom-in transition-transform hover:scale-105 duration-300"
+      />
+      
+      {urls.length > 1 && (
+        <>
+          <button
+            onClick={prevSlide}
+            className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/50 text-white rounded-full p-1.5 text-xs hover:bg-black/70 transition opacity-0 group-hover/carousel:opacity-100"
+          >
+            ◀
+          </button>
+          <button
+            onClick={nextSlide}
+            className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/50 text-white rounded-full p-1.5 text-xs hover:bg-black/70 transition opacity-0 group-hover/carousel:opacity-100"
+          >
+            ▶
+          </button>
+          <div className="absolute bottom-2 left-1/2 -translate-y-1/2 bg-black/40 text-[10px] text-white px-2 py-0.5 rounded-full font-bold">
+            {currentIndex + 1} / {urls.length}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function Home() {
   const [allEvents, setAllEvents] = useState<KidEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -142,6 +190,9 @@ export default function Home() {
   
   const [selectedTimelineDate, setSelectedTimelineDate] = useState<string | null>(null);
   const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
+  
+  // 💡 포스터 확대를 위한 라이트박스(Modal) 모달 팝업 상태 추가
+  const [modalImageUrl, setModalImageUrl] = useState<string | null>(null);
   
   const [minAgeFilter, setMinAgeFilter] = useState(0); 
   const [maxAgeFilter, setMaxAgeFilter] = useState(0); 
@@ -260,12 +311,10 @@ export default function Home() {
     });
   }, [baseFilteredEvents, selectedTimelineDate]);
 
-  // 💡 [안전하게 보완된] 특정 프로그램 우선순위 및 상태별 정렬 로직
   const sortedFilteredEvents = useMemo(() => {
     const now = currentTime || new Date();
 
     return [...finalFilteredEvents].sort((a, b) => {
-      // 1. 특정 프로그램(그룹 키)이 클릭된 경우 무조건 최상단 배치
       if (selectedGroupKey) {
         const aMatch = a.title.trim().substring(0, 10) === selectedGroupKey;
         const bMatch = b.title.trim().substring(0, 10) === selectedGroupKey;
@@ -273,11 +322,8 @@ export default function Home() {
         if (!aMatch && bMatch) return 1;
       }
 
-      // 2. 상태별 우선순위 점수 산정 로직 (타입 에러를 유발할 수 있는 접근을 안전하게 보호)
       const getPriority = (event: KidEvent) => {
         const isApplyStarted = event.applyStart ? new Date(event.applyStart.replace(' ', 'T')) <= now : false;
-        
-        // event 내부에 category 필드가 안전하게 존재하는지 검사
         const categoryStr = (event as any).category || '';
         const isEduExperience = categoryStr.includes('교육') || categoryStr.includes('체험');
         const isFestival = categoryStr.includes('축제');
@@ -287,16 +333,9 @@ export default function Home() {
         const isEventOngoing = event.eventStart ? new Date(event.eventStart) <= now : false;
         const isFieldChanceAge = isEduExperience && (event.status === '접수마감' || !isFlexibleApplying) && isEventOngoing;
 
-        // 1순위: 신청 다가오는 것 (오픈 예정 및 접수 대기)
         if (event.status === '접수대기' || (event.applyStart && !isApplyStarted)) return 1;
-        
-        // 2순위: 신청 진행중인 것 (확인 필요 포함)
         if (event.status === '접수중' || isFlexibleApplying) return 2;
-        
-        // 3순위: 행사 진행중인 것 (즉시 참여 및 현장 확인)
         if (isFieldChanceAge || !event.applyStart || isFestival) return 3;
-        
-        // 4순위: 접수 마감 및 기타
         return 4;
       };
 
@@ -304,10 +343,9 @@ export default function Home() {
       const prioB = getPriority(b);
 
       if (prioA !== prioB) {
-        return prioA - prioB; // 우선순위 점수 순 (1 -> 2 -> 3 -> 4)
+        return prioA - prioB;
       }
 
-      // 3. 같은 상태라면 접수 시작 시간 순 정렬
       if (a.applyStart && b.applyStart) {
         return new Date(a.applyStart.replace(' ', 'T')).getTime() - new Date(b.applyStart.replace(' ', 'T')).getTime();
       }
@@ -493,7 +531,6 @@ export default function Home() {
                   </div>
 
                   <div className="flex flex-col gap-2 overflow-y-auto max-h-[280px] pr-1 scrollbar-thin">
-                    {/* 🔴 1. 접수 오픈 예정 목록 */}
                     {applyEvents.map(ev => (
                       <div 
                         key={`apply-${ev.id}`} 
@@ -512,7 +549,6 @@ export default function Home() {
                       </div>
                     ))}
 
-                    {/* 🟡 2. 온라인 접수 진행중 목록 */}
                     {activeApplyEvents.map(ev => (
                       <div 
                         key={`active-apply-${ev.id}`} 
@@ -531,7 +567,6 @@ export default function Home() {
                       </div>
                     ))}
 
-                    {/* 🔵 3. 사전접수 없는 즉시 참여 축제/행사 목록 */}
                     {noApplyEvents.map(ev => (
                       <div 
                         key={`no-apply-${ev.id}`} 
@@ -550,7 +585,6 @@ export default function Home() {
                       </div>
                     ))}
 
-                    {/* 🟣 4. 사전예약은 지났으나 현장 기회가 남아있을 수 있는 행사중 목록 */}
                     {ongoingEvents.map(ev => (
                       <div 
                         key={`ongoing-${ev.id}`} 
@@ -599,6 +633,10 @@ export default function Home() {
 
               const isHighlighted = selectedGroupKey && event.title.trim().substring(0, 10) === selectedGroupKey;
 
+              // 💡 구글 시트 T열에 기재한 이미지 주소들을 쉼표(,) 기준으로 분리 파싱
+              const rawImageUrl = (event as any).imageUrl || '';
+              const imageArray = rawImageUrl.trim() ? rawImageUrl.split(',').filter((url: string) => url.trim() !== '') : [];
+
               return (
                 <div 
                   key={event.id} 
@@ -607,6 +645,11 @@ export default function Home() {
                   } p-5 flex flex-col justify-between transition-all duration-300`}
                 >
                   <div>
+                    {/* 🖼️ [대표님 반영 ⭐️] 홍보 포스터 이미지 슬라이더 영역 추가 */}
+                    {imageArray.length > 0 && (
+                      <ImageCarousel urls={imageArray} onImageClick={(url) => setModalImageUrl(url)} />
+                    )}
+
                     <div className="flex justify-between items-start mb-3">
                       <div className="flex gap-1.5 flex-wrap items-center">
                         <span className="bg-indigo-50 text-indigo-600 text-xs font-bold px-2.5 py-1 rounded-md">{event.region}</span>
@@ -720,6 +763,25 @@ export default function Home() {
           개선 및 오류 제보
         </span>
       </a>
+
+      {/* 🖼️ 이미지 원본 팝업 모달창 (Lightbox Modal) */}
+      {modalImageUrl && (
+        <div 
+          onClick={() => setModalImageUrl(null)}
+          className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4 cursor-zoom-out animate-in fade-in duration-200"
+        >
+          <div className="relative max-w-3xl max-h-[90vh] w-full h-full flex flex-col justify-center">
+            <img
+              src={modalImageUrl}
+              alt="홍보 포스터 원본 확대보기"
+              className="max-w-full max-h-[85vh] object-contain mx-auto rounded-lg shadow-2xl"
+            />
+            <p className="text-white/70 text-center text-xs mt-3 font-semibold">
+              바깥 화면을 터치하시면 닫힙니다 ✖
+            </p>
+          </div>
+        </div>
+      )}
 
     </main>
   );
