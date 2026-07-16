@@ -22,6 +22,7 @@ export interface KidEvent {
   link: string;           // Q열: 상세링크
   status: string;         // R열: 상태
   description: string;    // S열: 행사내용
+  imageUrl: string;       // 💡 [새로 추가] T열: 이미지 URL
 }
 
 export async function getEvents(): Promise<KidEvent[]> {
@@ -36,17 +37,16 @@ export async function getEvents(): Promise<KidEvent[]> {
 
     const sheets = google.sheets({ version: 'v4', auth });
     
-    // S열(행사내용)까지 전체 데이터를 안정적으로 긁어옵니다.
+    // 💡 수집 범위를 S에서 T열(이미지URL)까지 안정적으로 확장했습니다!
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.GOOGLE_SPREADSHEET_ID,
-      range: '시트1!A2:S', 
+      range: '시트1!A2:T', 
     });
 
     const rows = response.data.values;
     if (!rows || rows.length === 0) return [];
 
     return rows.map((row, index) => {
-      // 💡 대표님 시트의 열 위치에 정확하게 맞춘 매칭 Index (0부터 시작)
       const minAgeNum = Number(row[8]);
       const maxAgeNum = Number(row[9]);
 
@@ -70,6 +70,7 @@ export async function getEvents(): Promise<KidEvent[]> {
         link: row[16] || '',                      // Q열 (16)
         status: row[17] || '접수대기',             // R열 (17)
         description: row[18] || '',               // S열 (18)
+        imageUrl: row[19] || '',                  // 💡 T열 (19): 안전하게 수집 완료!
       };
     });
   } catch (error) {
