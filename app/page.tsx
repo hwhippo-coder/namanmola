@@ -125,7 +125,8 @@ function groupTimelineEvents(events: KidEvent[], type: string) {
       ...g.baseEvent,
       displayTitle,
       displayTime: g.times.sort().join(', '),
-      isGrouped: g.count > 1
+      isGrouped: g.count > 1,
+      groupKey: g.baseEvent.title.trim().substring(0, 10) 
     };
   });
 }
@@ -138,7 +139,9 @@ export default function Home() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRegion, setSelectedRegion] = useState('전체');
   const [selectedCost, setSelectedCost] = useState('전체');
+  
   const [selectedTimelineDate, setSelectedTimelineDate] = useState<string | null>(null);
+  const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
   
   const [minAgeFilter, setMinAgeFilter] = useState(0); 
   const [maxAgeFilter, setMaxAgeFilter] = useState(0); 
@@ -168,12 +171,12 @@ export default function Home() {
     setSelectedRegion('전체');
     setSelectedCost('전체');
     setSelectedTimelineDate(null);
+    setSelectedGroupKey(null);
     setMinAgeFilter(0);
     setMaxAgeFilter(0);
     setIsFilterOpen(false);
   };
 
-  // 📅 향후 10일 날짜 배열 생성
   const timelineDates = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -256,6 +259,56 @@ export default function Home() {
       return isApplyDate || isEventPeriod || isApplyPeriod;
     });
   }, [baseFilteredEvents, selectedTimelineDate]);
+
+  // 💡 [대표님 피드백] 특정 프로그램 우선순위 및 상태별 정렬 로직 결합
+  const sortedFilteredEvents = useMemo(() => {
+    const now = currentTime || new Date();
+
+    return [...finalFilteredEvents].sort((a, b) => {
+      // 1. 특정 프로그램(그룹 키)이 클릭된 경우 무조건 최상단 배치
+      if (selectedGroupKey) {
+        const aMatch = a.title.trim().substring(0, 10) === selectedGroupKey;
+        const bMatch = b.title.trim().substring(0, 10) === selectedGroupKey;
+        if (aMatch && !bMatch) return -1;
+        if (!aMatch && bMatch) return 1;
+      }
+
+      // 2. 상태별 우선순위 점수 산정 로직
+      const getPriority = (event: KidEvent) => {
+        const isApplyStarted = event.applyStart ? new Date(event.applyStart.replace(' ', 'T')) <= now : false;
+        const hasNoApplyEnd = !event.applyEnd || event.applyEnd.trim() === '';
+        const isFlexibleApplying = isApplyStarted && hasNoApplyEnd && event.status !== '접수마감' && (event.category || '').includes('교육/체험');
+        const isEventOngoing = event.eventStart ? new Date(event.eventStart) <= now : false;
+        const isFieldChanceAge = (event.category || '').includes('교육/체험') && (event.status === '접수마감' || !isFlexibleApplying) && isEventOngoing;
+
+        // 1순위: 신청 다가오는 것 (오픈 예정 및 접수 대기)
+        if (event.status === '접수대기' || (event.applyStart && !isApplyStarted)) return 1;
+        
+        // 2순위: 신청 진행중인 것 (확인 필요 포함)
+        if (event.status === '접수중' || isFlexibleApplying) return 2;
+        
+        // 3순위: 행사 진행중인 것 (즉시 참여 및 현장 확인)
+        if (isFieldChanceAge || !event.applyStart || (event.category || '').includes('축제')) return 3;
+        
+        // 4순위: 접수 마감 및 기타
+        return 4;
+      };
+
+      const prioA = getPriority(a);
+      const prioB = getPriority(b);
+
+      if (prioA !== prioB) {
+        return prioA - prioB; // 숫자가 작을수록 우선순위 높음 (1 -> 2 -> 3 -> 4)
+      }
+
+      // 3. 같은 상태(우선순위)라면 접수 시작 시간 순서대로 정렬
+      if (a.applyStart && b.applyStart) {
+        return new Date(a.applyStart.replace(' ', 'T')).getTime() - new Date(b.applyStart.replace(' ', 'T')).getTime();
+      }
+
+      return 0;
+    });
+  }, [finalFilteredEvents, selectedGroupKey, currentTime]);
 
   if (loading) {
     return (
@@ -352,16 +405,28 @@ export default function Home() {
         {/* 📅 향후 10일 타임라인 영역 */}
         <section className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
           <div className="mb-4">
-            <h2 className="text-base font-bold flex items-center gap-2 mb-2">🗓️ 향후 10일 타임라인</h2>
+            <div className="flex justify-between items-start">
+              <h2 className="text-base font-bold flex items-center gap-2 mb-2">🗓️ 향후 10일 타임라인</h2>
+              {selectedTimelineDate && (
+                <button 
+                  onClick={() => {
+                    setSelectedTimelineDate(null);
+                    setSelectedGroupKey(null);
+                  }}
+                  className="text-xs font-bold text-red-500 bg-red-50 px-2.5 py-1 rounded-md"
+                >
+                  날짜 필터 해제 ✖
+                </button>
+              )}
+            </div>
             
-            {/* 💡 대표님 피드백 반영: 유저들이 각 카드의 속성을 바로 직관적으로 알 수 있는 미니 범례 가이드 추가 */}
             <div className="flex flex-wrap gap-2 text-[10px] font-bold text-gray-500 bg-gray-50 p-2.5 rounded-xl border border-gray-100">
               <span className="flex items-center gap-1 text-red-600"><span className="inline-block w-2 h-2 rounded-full bg-red-500"></span>🔴 오픈 예정 (선착순 대기)</span>
               <span className="flex items-center gap-1 text-amber-600"><span className="inline-block w-2 h-2 rounded-full bg-amber-500"></span>🟡 접수중 (마감여부 확인)</span>
               <span className="flex items-center gap-1 text-blue-600"><span className="inline-block w-2 h-2 rounded-full bg-blue-500"></span>🔵 즉시 참여 (접수 없음)</span>
               <span className="flex items-center gap-1 text-purple-600"><span className="inline-block w-2 h-2 rounded-full bg-purple-400"></span>🟣 행사중 (현장접수 확인)</span>
             </div>
-            <p className="text-xs text-gray-400 mt-2">날짜를 클릭하면 해당 일자의 상세 목록만 하단에 필터링됩니다.</p>
+            <p className="text-xs text-gray-400 mt-2">특정 프로그램을 클릭하면 하단에서 해당 프로그램을 먼저 보여줍니다.</p>
           </div>
 
           <div className="flex overflow-x-auto gap-4 pb-4 snap-x scrollbar-thin">
@@ -369,10 +434,8 @@ export default function Home() {
               const isSelected = selectedTimelineDate === dayObj.fullDate;
               const targetDate = new Date(dayObj.fullDate);
               
-              // 1. 🔴 [접수 예정]: 사전접수일이 있고, 아직 시작하지 않은 오늘 오픈 건
               const rawApplyEvents = baseFilteredEvents.filter(e => e.applyStart.split(' ')[0] === dayObj.fullDate && e.category.includes('교육/체험'));
               
-              // 2. 🟡 [온라인 접수중]: 이미 시작되었고 시트 상 접수중 상태인 건 (마감일 유무 관계없이 체크 필요 유도)
               const rawActiveApplyEvents = baseFilteredEvents.filter(e => {
                 if (e.status === '접수마감' || e.category.includes('축제')) return false;
                 const applyStartPart = e.applyStart.split(' ')[0];
@@ -383,7 +446,6 @@ export default function Home() {
                 return endDay ? (targetDate >= startDay && targetDate <= endDay) : (targetDate >= startDay);
               });
 
-              // 3. 🔵 [즉시 참여]: '축제/행사' 카테고리이거나 접수 시작일 정보가 없는 현장 즉시 참여 가능 건
               const rawNoApplyEvents = baseFilteredEvents.filter(e => {
                 if (!e.category.includes('축제') && e.applyStart) return false;
                 const start = new Date(e.eventStart);
@@ -391,9 +453,8 @@ export default function Home() {
                 return targetDate >= start && targetDate <= end;
               });
 
-              // 4. 🟣 [행사중 - 현장접수 확인 필요]: 교육/체험 등 사전 예약을 주로 받았던 행사 중 본 일정이 진행중인 건
               const rawOngoingEvents = baseFilteredEvents.filter(e => {
-                if (e.category.includes('축제') || !e.applyStart) return false; // 3번과 중복 방지
+                if (e.category.includes('축제') || !e.applyStart) return false; 
                 const start = new Date(e.eventStart);
                 const end = new Date(e.eventEnd || e.eventStart);
                 return targetDate >= start && targetDate <= end;
@@ -409,7 +470,10 @@ export default function Home() {
               return (
                 <div 
                   key={dayObj.fullDate}
-                  onClick={() => setSelectedTimelineDate(isSelected ? null : dayObj.fullDate)}
+                  onClick={() => {
+                    setSelectedTimelineDate(isSelected ? null : dayObj.fullDate);
+                    setSelectedGroupKey(null);
+                  }}
                   className={`w-[220px] flex-shrink-0 flex flex-col rounded-xl border p-4 cursor-pointer snap-start transition-all ${
                     isSelected ? 'border-indigo-600 bg-indigo-50/30 ring-2 ring-indigo-500' :
                     dayObj.isToday ? 'border-red-400 bg-white shadow-sm' : 'border-gray-200 bg-white hover:border-indigo-300'
@@ -424,46 +488,78 @@ export default function Home() {
 
                   <div className="flex flex-col gap-2 overflow-y-auto max-h-[280px] pr-1 scrollbar-thin">
                     {/* 🔴 1. 접수 오픈 예정 목록 */}
-                    {applyEvents.map(e => (
-                      <div key={`apply-${e.id}`} className="bg-red-50 p-2 rounded border border-red-100">
+                    {applyEvents.map(ev => (
+                      <div 
+                        key={`apply-${ev.id}`} 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedTimelineDate(dayObj.fullDate);
+                          setSelectedGroupKey(ev.groupKey);
+                        }}
+                        className={`p-2 rounded border transition cursor-pointer ${selectedGroupKey === ev.groupKey ? 'bg-red-100 border-red-300 ring-1 ring-red-400' : 'bg-red-50 border-red-100 hover:bg-red-100'}`}
+                      >
                         <div className="flex justify-between items-center text-[10px] text-red-600 font-bold mb-1">
-                          <span>⏰ {e.displayTime} 오픈</span>
-                          <span className="bg-red-100 px-1.5 py-0.5 rounded text-[9px] font-extrabold max-w-[50px] truncate">{e.region}</span>
+                          <span>⏰ {ev.displayTime} 오픈</span>
+                          <span className="bg-red-100 px-1.5 py-0.5 rounded text-[9px] font-extrabold max-w-[50px] truncate">{ev.region}</span>
                         </div>
-                        <h4 className="text-[11px] font-bold text-gray-800 line-clamp-2 leading-snug break-keep">{e.displayTitle}</h4>
+                        <h4 className="text-[11px] font-bold text-gray-800 line-clamp-2 leading-snug break-keep">{ev.displayTitle}</h4>
                       </div>
                     ))}
 
                     {/* 🟡 2. 온라인 접수 진행중 목록 */}
-                    {activeApplyEvents.map(e => (
-                      <div key={`active-apply-${e.id}`} className="bg-amber-50 p-2 rounded border border-amber-100">
+                    {activeApplyEvents.map(ev => (
+                      <div 
+                        key={`active-apply-${ev.id}`} 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedTimelineDate(dayObj.fullDate);
+                          setSelectedGroupKey(ev.groupKey);
+                        }}
+                        className={`p-2 rounded border transition cursor-pointer ${selectedGroupKey === ev.groupKey ? 'bg-amber-100 border-amber-300 ring-1 ring-amber-400' : 'bg-amber-50 border-amber-100 hover:bg-amber-100'}`}
+                      >
                         <div className="flex justify-between items-center text-[10px] text-amber-700 font-bold mb-1">
                           <span>🔍 마감여부 확인</span>
-                          <span className="bg-amber-100 px-1.5 py-0.5 rounded text-[9px] font-extrabold max-w-[50px] truncate">{e.region}</span>
+                          <span className="bg-amber-100 px-1.5 py-0.5 rounded text-[9px] font-extrabold max-w-[50px] truncate">{ev.region}</span>
                         </div>
-                        <h4 className="text-[11px] font-bold text-gray-800 line-clamp-2 leading-snug break-keep">{e.displayTitle}</h4>
+                        <h4 className="text-[11px] font-bold text-gray-800 line-clamp-2 leading-snug break-keep">{ev.displayTitle}</h4>
                       </div>
                     ))}
 
                     {/* 🔵 3. 사전접수 없는 즉시 참여 축제/행사 목록 */}
-                    {noApplyEvents.map(e => (
-                      <div key={`no-apply-${e.id}`} className="bg-blue-50 p-2 rounded border border-blue-100">
+                    {noApplyEvents.map(ev => (
+                      <div 
+                        key={`no-apply-${ev.id}`} 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedTimelineDate(dayObj.fullDate);
+                          setSelectedGroupKey(ev.groupKey);
+                        }}
+                        className={`p-2 rounded border transition cursor-pointer ${selectedGroupKey === ev.groupKey ? 'bg-blue-100 border-blue-300 ring-1 ring-blue-400' : 'bg-blue-50 border-blue-100 hover:bg-blue-100'}`}
+                      >
                         <div className="flex justify-between items-center text-[10px] text-blue-600 font-bold mb-1">
                           <span>🎈 사전접수 없음</span>
-                          <span className="bg-blue-100 px-1.5 py-0.5 rounded text-[9px] font-extrabold max-w-[50px] truncate">{e.region}</span>
+                          <span className="bg-blue-100 px-1.5 py-0.5 rounded text-[9px] font-extrabold max-w-[50px] truncate">{ev.region}</span>
                         </div>
-                        <h4 className="text-[11px] font-bold text-gray-800 line-clamp-2 leading-snug break-keep">{e.displayTitle}</h4>
+                        <h4 className="text-[11px] font-bold text-gray-800 line-clamp-2 leading-snug break-keep">{ev.displayTitle}</h4>
                       </div>
                     ))}
 
-                    {/* 🟣 4. 💡 [대표님 의견 반영] 사전예약은 지났으나 현장 기회가 남아있을 수 있는 행사중 목록 */}
-                    {ongoingEvents.map(e => (
-                      <div key={`ongoing-${e.id}`} className="bg-purple-50/70 p-2 rounded border border-purple-100">
+                    {/* 🟣 4. 사전예약은 지났으나 현장 기회가 남아있을 수 있는 행사중 목록 */}
+                    {ongoingEvents.map(ev => (
+                      <div 
+                        key={`ongoing-${ev.id}`} 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedTimelineDate(dayObj.fullDate);
+                          setSelectedGroupKey(ev.groupKey);
+                        }}
+                        className={`p-2 rounded border transition cursor-pointer ${selectedGroupKey === ev.groupKey ? 'bg-purple-100 border-purple-300 ring-1 ring-purple-400' : 'bg-purple-50/70 border-purple-100 hover:bg-purple-100'}`}
+                      >
                         <div className="flex justify-between items-center text-[10px] text-purple-700 font-bold mb-1">
                           <span>📢 현장접수 확인</span>
-                          <span className="bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded text-[9px] font-extrabold max-w-[50px] truncate">{e.region}</span>
+                          <span className="bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded text-[9px] font-extrabold max-w-[50px] truncate">{ev.region}</span>
                         </div>
-                        <h4 className="text-[11px] font-bold text-gray-700 line-clamp-2 leading-snug break-keep">{e.displayTitle}</h4>
+                        <h4 className="text-[11px] font-bold text-gray-700 line-clamp-2 leading-snug break-keep">{ev.displayTitle}</h4>
                       </div>
                     ))}
                     
@@ -480,25 +576,30 @@ export default function Home() {
         {/* 📇 검색 결과 카드 영역 */}
         <section className="space-y-3">
           <div className="flex justify-between items-center pl-1">
-            <h2 className="text-sm font-bold text-gray-500">검색 결과 ({finalFilteredEvents.length}건)</h2>
+            <h2 className="text-sm font-bold text-gray-500">검색 결과 ({sortedFilteredEvents.length}건)</h2>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {finalFilteredEvents.map((event) => {
+            {sortedFilteredEvents.map((event) => {
               const ddayBadge = currentTime ? calculateDday(event.applyStart, currentTime) : null;
 
               const isApplyStarted = event.applyStart ? new Date(event.applyStart.replace(' ', 'T')) <= (currentTime || new Date()) : false;
               const hasNoApplyEnd = !event.applyEnd || event.applyEnd.trim() === '';
               
-              // 💡 주황색 경고를 띄울 조건부 플래그
-              const isFlexibleApplying = isApplyStarted && hasNoApplyEnd && event.status !== '접수마감' && event.category.includes('교육/체험');
+              const isFlexibleApplying = isApplyStarted && hasNoApplyEnd && event.status !== '접수마감' && (event.category || '').includes('교육/체험');
               
-              // 💡 🟣 [대표님 피드백 반영] 사전예약 완료 후 행사 중이나 현장 기회가 열려있을 수 있는 시그널 플래그
               const isEventOngoing = event.eventStart ? new Date(event.eventStart) <= (currentTime || new Date()) : false;
-              const isFieldChanceAge = event.category.includes('교육/체험') && (event.status === '접수마감' || !isFlexibleApplying) && isEventOngoing;
+              const isFieldChanceAge = (event.category || '').includes('교육/체험') && (event.status === '접수마감' || !isFlexibleApplying) && isEventOngoing;
+
+              const isHighlighted = selectedGroupKey && event.title.trim().substring(0, 10) === selectedGroupKey;
 
               return (
-                <div key={event.id} className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm flex flex-col justify-between hover:shadow-md transition">
+                <div 
+                  key={event.id} 
+                  className={`bg-white rounded-2xl border ${
+                    isHighlighted ? 'border-indigo-500 ring-4 ring-indigo-100 shadow-md' : 'border-gray-100 shadow-sm hover:shadow-md'
+                  } p-5 flex flex-col justify-between transition-all duration-300`}
+                >
                   <div>
                     <div className="flex justify-between items-start mb-3">
                       <div className="flex gap-1.5 flex-wrap items-center">
@@ -540,7 +641,6 @@ export default function Home() {
                       </div>
                     )}
 
-                    {/* 💡 🟣 [현장 접수 희망 시그널 알림 박스 적용완료] */}
                     {isFieldChanceAge && (
                       <div className="mb-4 bg-purple-50 border border-purple-100 rounded-xl p-3 text-xs text-purple-700 font-medium leading-relaxed break-keep flex items-start gap-1.5">
                         <span>📢</span>
@@ -593,7 +693,7 @@ export default function Home() {
                 </div>
               );
             })}
-            {finalFilteredEvents.length === 0 && (
+            {sortedFilteredEvents.length === 0 && (
               <div className="col-span-full bg-white text-center py-16 text-sm text-gray-400 rounded-2xl border border-dashed border-gray-200">
                 🔍 선택하신 필터와 조건에 매칭되는 프로그램이 없습니다.
               </div>
