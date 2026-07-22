@@ -131,8 +131,14 @@ function groupTimelineEvents(events: KidEvent[], type: string) {
   });
 }
 
-// 🖼️ 세로형 포스터 최적화 이미지 슬라이더 컴포넌트 (스크롤 탐색 + 안내 배지 추가)
-function ImageCarousel({ urls, onImageClick }: { urls: string[]; onImageClick: (url: string) => void }) {
+// 🖼️ 세로형 포스터 최적화 이미지 슬라이더 컴포넌트
+function ImageCarousel({ 
+  urls, 
+  onImageClick 
+}: { 
+  urls: string[]; 
+  onImageClick: (index: number) => void 
+}) {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   if (!urls || urls.length === 0) return null;
@@ -149,22 +155,20 @@ function ImageCarousel({ urls, onImageClick }: { urls: string[]; onImageClick: (
 
   return (
     <div className="relative w-full h-72 bg-gray-50 rounded-2xl overflow-hidden mb-4 group/carousel border border-gray-100/80 shadow-inner">
-      {/* 💡 [핵심 효과] hover-scroll: 마우스를 올리면 포스터 하단까지 부드럽게 스크롤링되는 액션 */}
       <div 
-        onClick={() => onImageClick(urls[currentIndex].trim())}
+        onClick={() => onImageClick(currentIndex)}
         className="w-full h-full cursor-zoom-in overflow-hidden relative"
       >
         <img
           src={urls[currentIndex].trim()}
           alt="행사 홍보 포스터"
           className="w-full absolute top-0 left-0 transition-all duration-[2.5s] ease-in-out hover:translate-y-[calc(-100%+18rem)] object-cover object-top origin-top"
-          style={{ height: 'auto' }} // 원본 종횡비를 유지하면서 스크롤되도록 설정
+          style={{ height: 'auto' }}
         />
       </div>
       
-      {/* 🔍 [안내 배지] 우측 하단 포스터 크게 보기 유도 가이드 아이콘 */}
       <div 
-        onClick={() => onImageClick(urls[currentIndex].trim())}
+        onClick={() => onImageClick(currentIndex)}
         className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 shadow-sm pointer-events-auto cursor-pointer hover:bg-black/80 transition-all"
       >
         <span>🔍</span>
@@ -206,13 +210,17 @@ export default function Home() {
   const [selectedTimelineDate, setSelectedTimelineDate] = useState<string | null>(null);
   const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
   
-  // 💡 포스터 확대를 위한 라이트박스(Modal) 모달 팝업 상태 추가
-  const [modalImageUrl, setModalImageUrl] = useState<string | null>(null);
+  // 💡 확대 팝업 모달 내부 구조 정의
+  const [modalImageUrls, setModalImageUrls] = useState<string[]>([]);
+  const [modalCurrentIndex, setModalCurrentIndex] = useState<number | null>(null);
   
   const [minAgeFilter, setMinAgeFilter] = useState(0); 
   const [maxAgeFilter, setMaxAgeFilter] = useState(0); 
 
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+  // 💡 [새로 추가] 노출 카드 수량을 제어하는 상태값 (초기 20개 표시)
+  const [visibleCount, setVisibleCount] = useState(20);
 
   useEffect(() => {
     async function loadData() {
@@ -232,6 +240,29 @@ export default function Home() {
     return () => clearInterval(timer);
   }, []);
 
+  // 💡 확대 팝업에서 키보드 화살표 입력 연동 리스너 추가
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (modalCurrentIndex === null || modalImageUrls.length <= 1) return;
+      
+      if (e.key === 'ArrowLeft') {
+        setModalCurrentIndex((prev) => (prev !== null ? (prev - 1 + modalImageUrls.length) % modalImageUrls.length : null));
+      } else if (e.key === 'ArrowRight') {
+        setModalCurrentIndex((prev) => (prev !== null ? (prev + 1) % modalImageUrls.length : null));
+      } else if (e.key === 'Escape') {
+        setModalCurrentIndex(null);
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [modalCurrentIndex, modalImageUrls]);
+
+  // 💡 [새로 추가] 검색어나 필터 조건이 변경되면 즉시 첫 화면 개수(20개)로 리셋 처리
+  useEffect(() => {
+    setVisibleCount(20);
+  }, [searchTerm, selectedRegion, selectedCost, selectedTimelineDate, minAgeFilter, maxAgeFilter]);
+
   const handleLogoClick = () => {
     setSearchTerm('');
     setSelectedRegion('전체');
@@ -241,6 +272,7 @@ export default function Home() {
     setMinAgeFilter(0);
     setMaxAgeFilter(0);
     setIsFilterOpen(false);
+    setVisibleCount(20);
   };
 
   const timelineDates = useMemo(() => {
@@ -339,7 +371,7 @@ export default function Home() {
 
       const getPriority = (event: KidEvent) => {
         const isApplyStarted = event.applyStart ? new Date(event.applyStart.replace(' ', 'T')) <= now : false;
-        const categoryStr = (event as any).category || '';
+        const categoryStr = event.category || '';
         const isEduExperience = categoryStr.includes('교육') || categoryStr.includes('체험');
         const isFestival = categoryStr.includes('축제');
 
@@ -635,7 +667,8 @@ export default function Home() {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {sortedFilteredEvents.map((event) => {
+            {/* 💡 [핵심 반영] visibleCount 만큼만 slice 처리하여 렌더링하도록 수정 */}
+            {sortedFilteredEvents.slice(0, visibleCount).map((event) => {
               const ddayBadge = currentTime ? calculateDday(event.applyStart, currentTime) : null;
 
               const isApplyStarted = event.applyStart ? new Date(event.applyStart.replace(' ', 'T')) <= (currentTime || new Date()) : false;
@@ -644,11 +677,10 @@ export default function Home() {
               const isFlexibleApplying = isApplyStarted && hasNoApplyEnd && event.status !== '접수마감' && (event.category || '').includes('교육/체험');
               
               const isEventOngoing = event.eventStart ? new Date(event.eventStart) <= (currentTime || new Date()) : false;
-              const isFieldChanceAge = (event.category || '').includes('교육/체험') && (event.status === '접수마감' || !isFlexibleApplying) && isEventOngoing;
+              const isFieldChanceAge = ((event as any).category || '').includes('교육/체험') && (event.status === '접수마감' || !isFlexibleApplying) && isEventOngoing;
 
               const isHighlighted = selectedGroupKey && event.title.trim().substring(0, 10) === selectedGroupKey;
 
-              // 💡 구글 시트 T열에 기재한 이미지 주소들을 쉼표(,) 기준으로 분리 파싱
               const rawImageUrl = (event as any).imageUrl || '';
               const imageArray = rawImageUrl.trim() ? rawImageUrl.split(',').filter((url: string) => url.trim() !== '') : [];
 
@@ -660,9 +692,14 @@ export default function Home() {
                   } p-5 flex flex-col justify-between transition-all duration-300`}
                 >
                   <div>
-                    {/* 🖼️ [대표님 반영 ⭐️] 홍보 포스터 이미지 슬라이더 영역 추가 */}
                     {imageArray.length > 0 && (
-                      <ImageCarousel urls={imageArray} onImageClick={(url) => setModalImageUrl(url)} />
+                      <ImageCarousel 
+                        urls={imageArray} 
+                        onImageClick={(index) => {
+                          setModalImageUrls(imageArray);
+                          setModalCurrentIndex(index);
+                        }} 
+                      />
                     )}
 
                     <div className="flex justify-between items-start mb-3">
@@ -757,6 +794,22 @@ export default function Home() {
                 </div>
               );
             })}
+            
+            {/* 💡 [핵심 반영] 아직 다 보지 않은 카드가 남아있는 경우에만 하단에 더보기 버튼 렌더링 */}
+            {sortedFilteredEvents.length > visibleCount && (
+              <div className="col-span-full flex justify-center pt-6">
+                <button
+                  onClick={() => setVisibleCount((prev) => prev + 20)}
+                  className="bg-white hover:bg-gray-50 text-gray-700 font-bold px-8 py-4 rounded-2xl border border-gray-200 shadow-sm transition-all flex items-center gap-2 text-sm active:scale-95"
+                >
+                  <span>🔽 행사 더보기</span>
+                  <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full font-extrabold">
+                    {sortedFilteredEvents.length - visibleCount}건 남음
+                  </span>
+                </button>
+              </div>
+            )}
+
             {sortedFilteredEvents.length === 0 && (
               <div className="col-span-full bg-white text-center py-16 text-sm text-gray-400 rounded-2xl border border-dashed border-gray-200">
                 🔍 선택하신 필터와 조건에 매칭되는 프로그램이 없습니다.
@@ -779,21 +832,51 @@ export default function Home() {
         </span>
       </a>
 
-      {/* 🖼️ 이미지 원본 팝업 모달창 (Lightbox Modal) */}
-      {modalImageUrl && (
+      {/* 🖼️ 다중 확대 슬라이더 모달창 (Lightbox Modal) */}
+      {modalCurrentIndex !== null && modalImageUrls.length > 0 && (
         <div 
-          onClick={() => setModalImageUrl(null)}
-          className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4 cursor-zoom-out animate-in fade-in duration-200"
+          onClick={() => setModalCurrentIndex(null)}
+          className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4 cursor-zoom-out animate-in fade-in duration-200"
         >
-          <div className="relative max-w-3xl max-h-[90vh] w-full h-full flex flex-col justify-center">
+          <div 
+            onClick={(e) => e.stopPropagation()} 
+            className="relative max-w-3xl max-h-[90vh] w-full h-full flex flex-col justify-center items-center select-none"
+          >
             <img
-              src={modalImageUrl}
+              src={modalImageUrls[modalCurrentIndex].trim()}
               alt="홍보 포스터 원본 확대보기"
-              className="max-w-full max-h-[85vh] object-contain mx-auto rounded-lg shadow-2xl"
+              className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl animate-in zoom-in-95 duration-200"
             />
-            <p className="text-white/70 text-center text-xs mt-3 font-semibold">
-              바깥 화면을 터치하시면 닫힙니다 ✖
+            
+            <p className="text-white/80 text-center text-xs mt-4 font-bold bg-black/40 px-3 py-1.5 rounded-full">
+              {modalCurrentIndex + 1} / {modalImageUrls.length} · 바깥 영역 터치 시 닫힘
             </p>
+
+            {modalImageUrls.length > 1 && (
+              <>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setModalCurrentIndex((prev) => (prev !== null ? (prev - 1 + modalImageUrls.length) % modalImageUrls.length : null));
+                  }}
+                  className="absolute left-0 md:-left-16 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 text-white hover:scale-105 rounded-full w-12 h-12 flex items-center justify-center text-base font-bold transition shadow-lg backdrop-blur-md cursor-pointer"
+                  title="이전 이미지 (키보드 ◀)"
+                >
+                  ◀
+                </button>
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setModalCurrentIndex((prev) => (prev !== null ? (prev + 1) % modalImageUrls.length : null));
+                  }}
+                  className="absolute right-0 md:-right-16 top-1/2 -translate-y-1/2 bg-white/10 hover:bg-white/20 text-white hover:scale-105 rounded-full w-12 h-12 flex items-center justify-center text-base font-bold transition shadow-lg backdrop-blur-md cursor-pointer"
+                  title="다음 이미지 (키보드 ▶)"
+                >
+                  ▶
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
