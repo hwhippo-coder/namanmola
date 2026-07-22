@@ -210,7 +210,6 @@ export default function Home() {
   const [selectedTimelineDate, setSelectedTimelineDate] = useState<string | null>(null);
   const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
   
-  // 💡 확대 팝업 모달 내부 구조 정의
   const [modalImageUrls, setModalImageUrls] = useState<string[]>([]);
   const [modalCurrentIndex, setModalCurrentIndex] = useState<number | null>(null);
   
@@ -218,8 +217,6 @@ export default function Home() {
   const [maxAgeFilter, setMaxAgeFilter] = useState(0); 
 
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-
-  // 💡 [새로 추가] 노출 카드 수량을 제어하는 상태값 (초기 20개 표시)
   const [visibleCount, setVisibleCount] = useState(20);
 
   useEffect(() => {
@@ -240,7 +237,6 @@ export default function Home() {
     return () => clearInterval(timer);
   }, []);
 
-  // 💡 확대 팝업에서 키보드 화살표 입력 연동 리스너 추가
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (modalCurrentIndex === null || modalImageUrls.length <= 1) return;
@@ -258,7 +254,6 @@ export default function Home() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [modalCurrentIndex, modalImageUrls]);
 
-  // 💡 [새로 추가] 검색어나 필터 조건이 변경되면 즉시 첫 화면 개수(20개)로 리셋 처리
   useEffect(() => {
     setVisibleCount(20);
   }, [searchTerm, selectedRegion, selectedCost, selectedTimelineDate, minAgeFilter, maxAgeFilter]);
@@ -371,7 +366,7 @@ export default function Home() {
 
       const getPriority = (event: KidEvent) => {
         const isApplyStarted = event.applyStart ? new Date(event.applyStart.replace(' ', 'T')) <= now : false;
-        const categoryStr = event.category || '';
+        const categoryStr = (event as any).category || '';
         const isEduExperience = categoryStr.includes('교육') || categoryStr.includes('체험');
         const isFestival = categoryStr.includes('축제');
 
@@ -667,7 +662,6 @@ export default function Home() {
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* 💡 [핵심 반영] visibleCount 만큼만 slice 처리하여 렌더링하도록 수정 */}
             {sortedFilteredEvents.slice(0, visibleCount).map((event) => {
               const ddayBadge = currentTime ? calculateDday(event.applyStart, currentTime) : null;
 
@@ -749,10 +743,11 @@ export default function Home() {
                       </div>
                     )}
 
+                    {/* 💡 [수정 완료] 참조사항(행사내용) 박스 최적화 및 타이틀 변경 */}
                     {event.description && (
-                      <div className="bg-gray-50 rounded-xl p-4 mb-4 text-sm text-gray-600 leading-relaxed border border-gray-100 break-keep">
-                        <p className="font-bold text-gray-500 mb-1.5">💡 행사 내용</p>
-                        <p className="line-clamp-3">{event.description}</p>
+                      <div className="bg-gray-50 rounded-xl p-3 mb-3 text-xs text-gray-600 leading-normal border border-gray-100 break-keep">
+                        <p className="font-bold text-gray-500 mb-1">💡 참조사항</p>
+                        <p className="line-clamp-2">{event.description}</p>
                       </div>
                     )}
                     
@@ -778,6 +773,7 @@ export default function Home() {
                       🔍 네이버검색
                     </button>
                     
+                    {/* 💡 [수정 완료] 버튼 텍스트 변경: '신청 페이지로 이동' -> '상세페이지 이동' */}
                     <button 
                       onClick={() => window.open(event.link, '_blank')}
                       className={`w-2/3 text-white text-[13px] font-bold py-3.5 rounded-xl transition shadow-sm ${
@@ -788,14 +784,13 @@ export default function Home() {
                           : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100'
                       }`}
                     >
-                      {isFieldChanceAge ? '현장 참여 및 공지 확인' : '신청 페이지로 이동'}
+                      {isFieldChanceAge ? '현장 참여 및 공지 확인' : '상세페이지 이동'}
                     </button>
                   </div>
                 </div>
               );
             })}
             
-            {/* 💡 [핵심 반영] 아직 다 보지 않은 카드가 남아있는 경우에만 하단에 더보기 버튼 렌더링 */}
             {sortedFilteredEvents.length > visibleCount && (
               <div className="col-span-full flex justify-center pt-6">
                 <button
